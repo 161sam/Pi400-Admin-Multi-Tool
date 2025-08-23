@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Try to discover TARGET IP on usb0 quickly & robustly
+set -euo pipefail
+IF=usb0
+
+# If interface down, exit
+ip link show "$IF" >/dev/null 2>&1 || { echo ""; exit 0; }
+
+# Prefer ARP/ND neighbor cache
+IP=$(ip -4 neigh show dev "$IF" nud reachable nud stale 2>/dev/null | awk '{print $1; exit}')
+if [ -n "${IP:-}" ]; then echo "$IP"; exit 0; fi
+
+# Try DHCP lease from systemd-networkd
+LEASE=$(ls /run/systemd/netif/leases 2>/dev/null | head -n1 || true)
+if [ -n "${LEASE:-}" ]; then
+  IP=$(grep -E '^CLIENT_IP_ADDRESS=' "/run/systemd/netif/leases/$LEASE" | cut -d= -f2 || true)
+  [ -n "${IP:-}" ] && { echo "$IP"; exit 0; }
+fi
+
+# Fallback ping sweep (few common spots)
+for host in 2 5 10 20 100 200; do
+  ip -4 addr show dev "$IF" | grep -q '192.168.7.1' && BASE=192.168.7 || BASE=$(ip -4 addr show dev "$IF" | awk '/inet /{split($2,a,"/"); split(a[1],b,"."); printf("%d.%d.%d\n",b[1],b[2],b[3]); exit}')
+  [ -z "${BASE:-}" ] && continue
+  ping -c1 -W1 "$BASE.$host" >/dev/null 2>&1 && { echo "$BASE.$host"; exit 0; }
+done
+
+echo "" # unknown
