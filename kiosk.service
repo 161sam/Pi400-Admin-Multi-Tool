@@ -1,0 +1,15 @@
+[Service]
+User=kiosk
+Group=kiosk
+Environment=DISPLAY=:0
+Environment=XDG_RUNTIME_DIR=/run/user/%U
+PAMName=login
+TTYPath=/dev/tty1
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+ExecStartPre=/bin/mkdir -p /run/user/%U
+ExecStartPre=/bin/chown kiosk:kiosk /run/user/%U
+ExecStart=/usr/bin/startx /opt/pi400-admin/scripts/start-iced.sh -- :0 -nocursor
+Restart=always
+RestartSec=3
